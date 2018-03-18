@@ -1,21 +1,20 @@
-from __future__ import print_function # For those of you that need a talkin' too...  >:(
+from __future__ import print_function # For those of you that need a talkin' to...  >:(
 import requests
-import base64
 import csv
 import sys
 
+# TODO: mask password input
 # WR API Credentials
 print('\n--- Webroot API Credentials')
 clientID = input('Enter Webroot API Client ID: ')
 clientSecret = input('Client Secret: ')
-
-# Webroot GSM Portal User Login
-print('\n\n--- Webroot Admin Console Login')
-wruser = input('Webroot Global Console Login Email: ')
-wrpass = input('Enter Webroot Portal Password: ') # TODO: mask this input
-
 # GSM Parent Keycode (same for all admins and sites)
 keycode = input('Enter GSM Parent Keycode: ')
+
+# Webroot GSM Portal User Login
+print('\n--- Webroot Admin Console Login')
+wruser = input('Webroot Global Console Login Email: ')
+wrpass = input('Enter Webroot Portal Password: ')
 
 # The base URL for the Webroot API
 baseURL = 'https://unityapi.webrootcloudav.com'
@@ -40,7 +39,8 @@ def getToken(s):
     data.update(scope='Console.GSM')
     
     print('Retrieving Access Token...')
-    r = s.post(tokenURL, data=data, auth=requests.auth.HTTPBasicAuth(clientID, clientSecret))
+    r = s.post(tokenURL, data=data, 
+               auth=requests.auth.HTTPBasicAuth(clientID, clientSecret))
     token_data = r.json()
     return token_data
 
@@ -88,7 +88,8 @@ def main():
     # Main Loop
     with open('Webroot_Endpoints.csv', 'w', newline='') as csvfile:
         c = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
-        c.writerow(['Site Name', 'Machine Name', 'Machine Policy', 'Last Seen', 'Agent Version', 'Group Name', 'Site Default Policy'])
+        c.writerow(['Site Name', 'Machine Name', 'Machine Policy', 
+                    'Last Seen', 'Agent Version', 'Group Name', 'Site Default Policy'])
         for site in sites['Sites']:
             print('Requesting data for site: ' + site['SiteName'])
             endpoints = getEndpoints(site, s)
