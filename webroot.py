@@ -2,8 +2,13 @@ from __future__ import print_function # For those of you that need a talkin' to.
 import requests
 import csv
 import sys
+from getpass import getpass
 
-# TODO: mask password input
+# Webroot GSM Portal User Login
+print('\n--- Webroot Admin Console Login')
+wruser = input('Webroot Global Console Login Email: ')
+wrpass = getpass('Enter Webroot Portal Password: ')
+
 # WR API Credentials
 print('\n--- Webroot API Credentials')
 clientID = input('Enter Webroot API Client ID: ')
@@ -11,40 +16,45 @@ clientSecret = input('Client Secret: ')
 # GSM Parent Keycode (same for all admins and sites)
 keycode = input('Enter GSM Parent Keycode: ')
 
-# Webroot GSM Portal User Login
-print('\n--- Webroot Admin Console Login')
-wruser = input('Webroot Global Console Login Email: ')
-wrpass = input('Enter Webroot Portal Password: ')
-
 # The base URL for the Webroot API
 baseURL = 'https://unityapi.webrootcloudav.com'
 
 def _url(path):
     return baseURL + path
 
-def getToken(s):
+def getToken(token):
     """
     Get our access token from Webroot.  Good for 300 seconds, 
-    then use refresh_token for 15 minutes.
+    then use refresh_token to obtain a new token.
+    
+    If an existing token is passed, the refresh_token
+    will be used to request a new token.
     
     Returns the entire response in JSON form.
     Use token_data['access_token'] for the primary token.
     """
+    
     s.headers.update({'Content-Type' : 'application/x-www-form-urlencoded'})
     s.headers.update(Accept='application/json')
     
-    data = dict(username=wruser)
-    data.update(password=wrpass)
-    data.update(grant_type='password')
+    # if we don't already have token, get a new one with console creds.
+    if not token:
+        data = dict(username=wruser)
+        data.update(password=wrpass)
+        data.update(grant_type='password')
+    # otherwise, use refresh_token to renew
+    else:
+        data = dict(refresh_token=token['refresh_token'])
+        data.update(grant_type='refresh_token')
+    # this will be the same regardless
     data.update(scope='Console.GSM')
     
     print('Retrieving Access Token...')
     r = s.post(tokenURL, data=data, 
                auth=requests.auth.HTTPBasicAuth(clientID, clientSecret))
-    token_data = r.json()
-    return token_data
+    return r.json()
 
-def getSites(s):
+def getSites():
     """
     Query the base site URL with the keycode.
     
@@ -52,38 +62,43 @@ def getSites(s):
     We'll use this for the Site Name, Site ID, and 
     default Site Policy.
     """
-    s.headers.update({'Content-Type': 'application/json'})
+    s.headers.update({'Content-Type':'application/json'})
     print('Retrieving site list...')
     r = s.get(siteIDURL)
-    return r.json()
+    token_data = r.json()
+    return token_data
 
-def getEndpoints(site, s):
+def getEndpoints(site):
     """
     Given the site as a parameter, use the SiteId to return
     a JSON response with metadata of all endpoints.
     """
     r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints')
+    r = r.json()
     
-    # If we receive an error, try the refresh_token
-    if r.status_code == 401:
-        s.headers.update(Authorization='Bearer ' + token['refresh_token'])
-        r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints')
-    return r.json()
+    # If we receive an error, our token may have timed out.  Try renewing.
+    if 'statusCode' in r:
+        if r['error'] == 'invalid_token':
+            getToken(token)
+            s.headers.update(Authorization='Bearer ' + token['access_token'])
+            r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints')
+            r = r.json()
+    return r
 
 # The only two URLs we'll need for this data.
 tokenURL = _url('/auth/token')
 siteIDURL = _url('/service/api/console/gsm/' + keycode + '/sites')
+    
+# Start a session to keep TCP connection alive for faster queries
+s = requests.Session()
 
+# Add our token to request headers for the session
+token = dict()
+token = getToken(token)
+s.headers.update(Authorization='Bearer ' + token['access_token'])
+    
 def main():
-    
-    # Start a session to keep TCP connection alive for faster queries
-    s = requests.Session()
-    
-    # Add our token to request headers for the session
-    token = getToken(s)
-    s.headers.update(Authorization='Bearer ' + token['access_token'])
-    
-    sites = getSites(s)
+    sites = getSites()
     
     # Main Loop
     with open('Webroot_Endpoints.csv', 'w', newline='') as csvfile:
@@ -92,10 +107,9 @@ def main():
                     'Last Seen', 'Agent Version', 'Group Name', 'Site Default Policy'])
         for site in sites['Sites']:
             print('Requesting data for site: ' + site['SiteName'])
-            endpoints = getEndpoints(site, s)
+            endpoints = getEndpoints(site)
             # Some sites are expired or we have no access
             if not 'Endpoints' in endpoints:
-                print('   [!] Unable to retrieve endpoint info fot site!')
                 print('   [!] ' + endpoints['error_description'])
                 continue
             for endpoint in endpoints['Endpoints']:
