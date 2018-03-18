@@ -64,10 +64,10 @@ def getEndpoints(site, s):
     """
     r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints')
     
-    # If we receive an error, update the token with the refresh_token
+    # If we receive an error, try the refresh_token
     if r.status_code == 401:
         s.headers.update(Authorization='Bearer ' + token['refresh_token'])
-        s.get(siteIDURL + '/' + site['SiteID'] + '/endpoints')
+        r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints')
     return r.json()
 
 # The only two URLs we'll need for this data.
@@ -83,7 +83,7 @@ def main():
     token = getToken(s)
     s.headers.update(Authorization='Bearer ' + token['access_token'])
     
-    sites = getSites(s)    
+    sites = getSites(s)
     
     # Main Loop
     with open('Webroot_Endpoints.csv', 'w', newline='') as csvfile:
