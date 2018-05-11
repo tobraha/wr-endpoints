@@ -51,8 +51,8 @@ def getToken(token):
     
     print('Retrieving Access Token...')
     r = s.post(tokenURL, data=data, 
-               auth=requests.auth.HTTPBasicAuth(clientID, clientSecret))
-    return r.json()
+               auth=requests.auth.HTTPBasicAuth(clientID, clientSecret)).json()
+    return r
 
 def getSites():
     """
@@ -73,16 +73,14 @@ def getEndpoints(site):
     Given the site as a parameter, use the SiteId to return
     a JSON response with metadata of all endpoints.
     """
-    r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints')
-    r = r.json()
+    r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints').json()
     
     # If we receive an error, our token may have timed out.  Try renewing.
     if 'statusCode' in r:
         if r['error'] == 'invalid_token':
             getToken(token)
             s.headers.update(Authorization='Bearer ' + token['access_token'])
-            r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints')
-            r = r.json()
+            r = s.get(siteIDURL + '/' + site['SiteId'] + '/endpoints').json()
     return r
 
 # The only two URLs we'll need for this data.
@@ -103,7 +101,7 @@ def main():
     # Main Loop
     with open('Webroot_Endpoints.csv', 'w', newline='') as csvfile:
         c = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
-        c.writerow(['Site Name', 'Machine Name', 'Machine Policy', 
+        c.writerow(['Site Name', 'Machine Name', 'Machine Policy', 'Installed OS',
                     'Last Seen', 'Agent Version', 'Group Name', 'Site Default Policy'])
         for site in sites['Sites']:
             print('Requesting data for site: ' + site['SiteName'])
@@ -114,7 +112,7 @@ def main():
                 continue
             for endpoint in endpoints['Endpoints']:
                 c.writerow([site['SiteName'], endpoint['HostName'], endpoint['PolicyName'], 
-                            endpoint['LastSeen'], endpoint['AgentVersion'], 
+                            endpoint['WindowsFullOS'], endpoint['LastSeen'], endpoint['AgentVersion'], 
                             endpoint['GroupName'], site['PolicyName']])
     
     return 0
